@@ -1,0 +1,25 @@
+cria pasta server
+cd server
+npm init -y
+npm install express, socket.io --save
+npm install nodemon --save-dev
+
+cd ..
+vue create client
+( isso deu meio errado com o VUE2 então usei o VUE3)
+
+#se não tiver vue instalado
+yarn global add @vue/cli
+npm i -g @vue/cli
+
+
+# RODAR:
+npm run start 	( server )
+npm run server 	( client )
+
+# MEXER EM:
+server/app.js
+client/src/components
+
+# PAGINA HTML BASE VUE:
+client/public/index.html
