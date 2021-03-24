@@ -21,11 +21,14 @@ class Game
 {
     constructor()
     {
+        // Regras base do jogo
         this.gameRules = new GameRules();
 
         this.deltaPosition = this.gameRules.tile_size;
         this.screen = this.gameRules.camera;
 
+        // Estado do jogo.
+        // Contem as informacoes necessarias pra inicar o canvas no client
         this.state = {
             players: {},
             scenario: {
@@ -43,11 +46,14 @@ class Game
     {
         console.log("> Adding player ", command.playerId)
         const playerId = command.playerId;
+
+        // Randomiza a posição de spawn do player no mapa
         const playerX = 'playerX' in command ? command.playerX : Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
         const playerY = 'playerY' in command ? command.playerY : Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
         var camPlayerX = playerX - this.screen.width/2;
         var camPlayerY = playerY - this.screen.height/2;
 
+        // Adiciona o player no state do jogo
         this.state.players[playerId] = {
             x: playerX,
             y: playerY,
@@ -56,9 +62,8 @@ class Game
                 y: camPlayerY
             }
         }
-        // console.log(this.state.players[playerId])
 
-        
+        // Notifica todos clients que tem um novo player
         this.notifyAll({
             type: 'add-player',
             playerId: command.playerId,
@@ -166,16 +171,6 @@ SocketIo.on("connection", socket => {
         command.type = 'move-player'
         
         game.movePlayer(command)
-
-        new_command = {
-            playerId: playerId,
-            position: {
-                x: game.state.players[playerId].x,
-                y: game.state.players[playerId].y
-            }
-        }
-
-        SocketIo.emit('move-player', new_command);
     })
 });
 
