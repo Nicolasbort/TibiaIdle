@@ -3,31 +3,48 @@ const Http      = require("http").Server(Express);
 const SocketIo  = require("socket.io")(Http);
 
 
+class GameRules
+{
+    constructor()
+    {
+        this.tile_size = 16; // Pixels
+
+        this.camera = {
+            width: 320,
+            height: 320
+        }
+    }
+}
+
 
 class Game
 {
-    constructor(width, height)
+    constructor()
     {
-        this.deltaPosition = 3;
+        this.gameRules = new GameRules();
+
+        this.deltaPosition = this.gameRules.tile_size;
+        this.screen = this.gameRules.camera;
+
         this.state = {
             players: {},
+            scenario: {
+                image: {
+                    path: "../assets/map.png",
+                    width: 640,
+                    height: 640
+                }
+            }
         };
-        this.screen = {
-            width: width,
-            height: height
-        };
-        this.map = {
-            width: 595,
-            height: 595
-        }
+
     }
 
     addPlayer(command)
     {
         console.log("> Adding player ", command.playerId)
         const playerId = command.playerId;
-        const playerX = 'playerX' in command ? command.playerX : Math.floor(Math.random() * this.screen.width);
-        const playerY = 'playerY' in command ? command.playerY : Math.floor(Math.random() * this.screen.height);
+        const playerX = 'playerX' in command ? command.playerX : Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
+        const playerY = 'playerY' in command ? command.playerY : Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
         var camPlayerX = playerX - this.screen.width/2;
         var camPlayerY = playerY - this.screen.height/2;
 
@@ -56,7 +73,6 @@ class Game
         });
     }
 
-
     removePlayer(command) {
         delete this.state.players[command.playerId];
 
@@ -77,15 +93,19 @@ class Game
                 }
             },
             ArrowRight(player) {
-                if (player.x + that.deltaPosition < that.map.width) {
+                if (player.x + that.deltaPosition < that.state.scenario.image.width) {
                     player.x += that.deltaPosition
                     player.cam.x += that.deltaPosition
+                }else{
+                    console.log("Limit " ,that.state.scenario.width)
                 }
             },
             ArrowDown(player) {
-                if (player.y + that.deltaPosition < that.map.height) {
+                if (player.y + that.deltaPosition < that.state.scenario.image.height) {
                     player.y += that.deltaPosition
                     player.cam.y += that.deltaPosition
+                }else{
+                    console.log("Limit ", that.state.scenario.height)
                 }
             },
             ArrowLeft(player) {
@@ -124,7 +144,7 @@ class Game
 }
 
 
-const game = new Game(300, 300);
+const game = new Game();
 
 SocketIo.on("connection", socket => {
 
@@ -133,17 +153,7 @@ SocketIo.on("connection", socket => {
 
     game.addPlayer({ playerId: playerId })
 
-    setup = {
-        state: game.state,
-        scenario: {
-            image: {
-                width: 595,
-                height: 595
-            }
-        }
-    }
-
-    socket.emit('setup', setup)
+    socket.emit('setup', game.state)
 
     socket.on('disconnect', () => {
         console.log(`> Player disconnected: ${playerId}`)
