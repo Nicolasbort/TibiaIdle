@@ -70,7 +70,7 @@
                 var sprite_char = new Image();
                 var sprite_enemy = new Image();
                 for( const [key, value] of Object.entries(this.playerList)){
-                    // console.log(value)
+                    console.log(value.position)
                     // console.log(this.playerSprites[value.sprite])
                     sprite_char.src = this.playerSprites[value.sprite];
                     this.context.drawImage(sprite_char, 0, 0, 16, 16, value.position.x, value.position.y, 16, 16);   
