@@ -145,7 +145,7 @@ class Game
                 },
                 cam: player.cam
             });
-            // console.log("Player position: ", player.x, player.y)
+            console.log("Player position: ", player.x, player.y)
         }
     }
 
@@ -157,6 +157,7 @@ class Game
 
     openCollisionMap(filepath)
     {
+
         var collision_array = new Array(this.grid_size);
 
         var that = this
