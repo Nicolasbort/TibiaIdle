@@ -1,7 +1,7 @@
 const Express   = require("express")();
 const Http      = require("http").Server(Express);
 const SocketIo  = require("socket.io")(Http);
-
+const PNG       = require('png-js');
 
 class GameRules
 {
@@ -40,6 +40,11 @@ class Game
             }
         };
 
+        this.grid_size = this.state.scenario.image.width / this.deltaPosition;
+
+        
+
+        this.openCollisionMap("assets/map_col.png")
     }
 
     addPlayer(command)
@@ -126,7 +131,8 @@ class Game
         const player = that.state.players[playerId]
         const moveFunction = acceptedMoves[keyPressed]
 
-        console.log("Cam position: ", player.cam);
+        // console.log("Cam position: ", player.cam);
+        this.checkCollision()
 
         if (player && moveFunction) {
             moveFunction(player)
@@ -142,6 +148,62 @@ class Game
             // console.log("Player position: ", player.x, player.y)
         }
     }
+
+    checkCollision(x, y)
+    {
+        return true;
+    }
+
+
+    openCollisionMap(filepath)
+    {
+        var collision_array = new Array(this.grid_size);
+
+        var that = this
+        PNG.decode(filepath, function (pixels) {
+            for (var i=0; i<that.grid_size; i++)
+            {
+                var grid_pixels = that.grid_size*4;
+                var row_pixels = pixels.slice(grid_pixels*i, grid_pixels*(i+1))
+                var new_row = [];
+                
+                for (var j=0; j<row_pixels.length; j+= 4)
+                {
+                    if (row_pixels[j] >= 240){
+                        row_pixels[j] = 1;
+                    }
+                    new_row.push(row_pixels[j]);
+                }
+                collision_array[i] = new_row;
+            }
+            
+            // Aqui funciona, tirando o return
+            console.log(collision_array)
+            // return collision_array 
+        });
+
+        // Aqui nao funciona
+        // console.log(collision_array)
+    }
+
+    saveCollisionMap(filepath)
+    {
+        var fs = require('fs');
+
+        var file = fs.createWriteStream(filepath);
+
+        file.on('error', function (err) { 
+            console.log(err); 
+            return false;
+        });
+
+        this.collision_array.forEach(function (v) { 
+            file.write(v + '\n'); 
+        })
+
+        file.end();
+    }
+
 
     notifyAll(command){
         SocketIo.emit(command.type, command);
