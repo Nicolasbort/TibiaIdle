@@ -33,6 +33,7 @@ class Game
         this.state = {
             players: {},
             enemies: {},
+            countEnemies: 0,
             scenario: {
                 image: {
                     path: "../assets/map.png",
@@ -52,7 +53,7 @@ class Game
 
 
     intervalUpdatePlayersList(that){
-        SocketIo.emit("serverUpdate", {playerList: that.state.players, collisionGrid: that.state.scenario.collisionGrid});
+        SocketIo.emit("serverUpdate", {playerList: that.state.players, enemyList: that.state.enemies});
     }
 
     addPlayer(socket)
@@ -75,7 +76,7 @@ class Game
         this.state.players[socket.id] = {
             x:      playerX,
             y:      playerY,
-            sprite: Math.floor(Math.random()*2),
+            sprite: Math.floor(Math.random()*3),
             cam: {
                 x:  camPlayerX,
                 y:  camPlayerY
@@ -134,9 +135,42 @@ class Game
         player.cam.x = player.cam.x < this.state.scenario.image.width/2 ? player.cam.x : this.state.scenario.image.width/2;
     }
 
+
+    addEnemy()
+    {
+        // Randomiza a posição de spawn do player no mapa
+        var enemyX  = Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
+        var enemyY  = Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
+
+        // Reinicializa a posicao enquanto o spawn estiver em colisao com o mapa
+        while (this.checkCollision(enemyX, enemyY)){
+            console.log("Enemy Spawn Collision!")
+            enemyX   = Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
+            enemyY   = Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
+        }
+
+        console.log("Enemy Position: ", enemyX, enemyY);
+
+        // Adiciona o player no state do jogo
+        this.state.enemies[this.state.countEnemies] = {
+            x:      enemyX,
+            y:      enemyY,
+            sprite: Math.floor(Math.random()*4),
+        }
+        this.state.countEnemies += 1
+        
+        this.setCollisionMapValue(enemyX, enemyY, 1);
+    }
+
+
     checkCollision(x, y)
     {
         return this.state.collisionGrid? this.state.collisionGrid[Math.round(y/16)][Math.round(x/16)] : 0
+    }
+
+    setCollisionMapValue(x, y, value)
+    {
+        this.state.collisionGrid[Math.round(y/16)][Math.round(x/16)] = value
     }
 
     loadCollisionMap(filepath){
@@ -179,6 +213,9 @@ SocketIo.on("connection", socket => {
 
     game.addPlayer(socket)
     console.log(`> Player connected to server: ${socket.id}`)
+
+    game.addEnemy();
+    game.addEnemy();
 
     socket.on('disconnect', () => {
         console.log(`> Player disconnected: ${socket.id}`)

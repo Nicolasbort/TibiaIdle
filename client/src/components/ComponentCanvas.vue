@@ -21,7 +21,13 @@
                     require('../assets/priest2/v1/priest2_v1_1.png'),
                     require('../assets/priest3/v1/priest3_v1_1.png'),
                 ],
-                background: new Image()
+                enemySprites: [
+                    require('../assets/skeleton/v1/skeleton2_v1_1.png'),
+                    require('../assets/skeleton/v1/skeleton2_v1_2.png'),
+                    require('../assets/skeleton/v1/skeleton2_v1_3.png'),
+                    require('../assets/skeleton/v1/skeleton2_v1_4.png'),
+                ],
+                background: new Image(),
             }
         },
         created() {
@@ -36,10 +42,15 @@
                 if("playerList" in data){
                     that.playerList = data.playerList;
                 }
+                if ("enemyList" in data){
+                    that.enemyList = data.enemyList;
+                }
+                // console.log(data);
                 that.render();
             });
 
             window.addEventListener('keypress', function(e){
+                console.log(that.enemyList)
                 var keypressed = e.key;
                 that.socket.emit('clientKeyPressed', keypressed);
             });
@@ -57,10 +68,17 @@
                 this.context.drawImage(this.background, 0, 0);   
 
                 var sprite_char = new Image();
+                var sprite_enemy = new Image();
                 for( const [key, value] of Object.entries(this.playerList)){
                     sprite_char.src = this.playerSprites[value.sprite];
                     this.context.drawImage(sprite_char, 0, 0, 16, 16, value.x, value.y, 16, 16);   
                 }
+
+                for( const [key, value] of Object.entries(this.enemyList)){
+                    sprite_enemy.src = this.enemySprites[value.sprite];
+                    this.context.drawImage(sprite_enemy, 0, 0, 16, 16, value.x, value.y, 16, 16);   
+                }
+
 
                 // Não sei pra que serve mas tem que usar
                 this.context.restore();
