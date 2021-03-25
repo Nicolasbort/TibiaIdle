@@ -1,6 +1,7 @@
 const Express   = require("express")();
 const Http      = require("http").Server(Express);
 const SocketIo  = require("socket.io")(Http);
+const { Socket } = require("dgram");
 const PNG       = require('png-js');
 
 class GameRules
@@ -39,118 +40,93 @@ class Game
                 }
             }
         };
-
+        
         this.grid_size = this.state.scenario.image.width / this.deltaPosition;
 
-        
 
-        this.openCollisionMap("assets/map_col.png")
+        this.openCollisionMap("assets/map_col.png");
+        setInterval(this.intervalUpdatePlayersList, 100, this);
     }
 
-    addPlayer(command)
-    {
-        console.log("> Adding player ", command.playerId)
-        const playerId = command.playerId;
 
+    intervalUpdatePlayersList(gameController){
+        var playerList = gameController.state.players;
+        SocketIo.emit("serverUpdatePlayerList", {playerList: playerList});
+    }
+
+    addPlayer(socket)
+    {
         // Randomiza a posição de spawn do player no mapa
-        const playerX = 'playerX' in command ? command.playerX : Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
-        const playerY = 'playerY' in command ? command.playerY : Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
-        var camPlayerX = playerX - this.screen.width/2;
-        var camPlayerY = playerY - this.screen.height/2;
+        var playerX     = Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
+        var playerY     = Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
+        var camPlayerX  = playerX - this.screen.width/2;
+        var camPlayerY  = playerY - this.screen.height/2;
 
         // Adiciona o player no state do jogo
-        this.state.players[playerId] = {
-            x: playerX,
-            y: playerY,
+        this.state.players[socket.id] = {
+            x:      playerX,
+            y:      playerY,
+            sprite: Math.floor(Math.random()*2),
             cam: {
-                x: camPlayerX,
-                y: camPlayerY
+                x:  camPlayerX,
+                y:  camPlayerY
             }
         }
-
-        // Notifica todos clients que tem um novo player
-        this.notifyAll({
-            type: 'add-player',
-            playerId: command.playerId,
-            position: {
-                x: playerX,
-                y: playerY,
-            },
-            cam: {
-                x: camPlayerX,
-                y: camPlayerY
-            }
-        });
     }
 
-    removePlayer(command) {
-        delete this.state.players[command.playerId];
-
-        this.notifyAll({
-            type: 'remove-player',
-            playerId: command.playerId
-        });
+    removePlayer(socket) {
+        delete this.state.players[socket.id];
     }
 
-    movePlayer(command) 
+    movePlayer(socket, keyPressed) 
     {
-        var that = this;
-        const acceptedMoves = {
-            ArrowUp(player) {
-                var next_position = player.y - that.deltaPosition;
-                if (next_position >= 0 && !that.checkCollision(player.x, next_position)) {
-                    player.y = next_position
-                    player.cam.y -= that.deltaPosition
+        var player          = this.state.players[socket.id];
+        var camLimitX       = this.state.scenario.image.height - 20*this.deltaPosition;
+        var camLimitY       = this.state.scenario.image.width - 20*this.deltaPosition;
+        var camDifferenceX  = Math.abs(player.x - player.cam.x)/this.deltaPosition;
+        var camDifferenceY  = Math.abs(player.y - player.cam.y)/this.deltaPosition;
+    
+        switch(keyPressed){
+            case "w":
+            case "ArrowUp":
+                if(!this.checkCollision(player.x, player.y - this.deltaPosition)){
+                    player.y        -= this.deltaPosition;
+                    player.cam.y    -= camDifferenceY == 10 ? this.deltaPosition : 0;
                 }
-            },
-            ArrowRight(player) {
-                var next_position = player.x + that.deltaPosition;
-                if (next_position < that.state.scenario.image.width && !that.checkCollision(next_position, player.y)) {
-                    player.x = next_position
-                    player.cam.x += that.deltaPosition
-                }else{
-                    console.log("Limit " ,that.state.scenario.width)
+                break;
+            case "s":
+            case "ArrowDown":
+                if(!this.checkCollision(player.x, player.y + this.deltaPosition)){
+                    player.y        += this.deltaPosition;
+                    player.cam.y    += camDifferenceY == 10 ? this.deltaPosition : 0;
                 }
-            },
-            ArrowDown(player) {
-                var next_position = player.y + that.deltaPosition;
-                if (player.y + that.deltaPosition < that.state.scenario.image.height && !that.checkCollision(player.x, next_position)) {
-                    player.y = next_position
-                    player.cam.y += that.deltaPosition
-                }else{
-                    console.log("Limit ", that.state.scenario.height)
+                break;
+            case "a":
+            case "ArrowLeft":
+                if(!this.checkCollision(player.x - this.deltaPosition, player.y)){
+                    player.x        -= this.deltaPosition;
+                    player.cam.x    -= camDifferenceX == 10 ? this.deltaPosition : 0;
                 }
-            },
-            ArrowLeft(player) {
-                var next_position = player.x - that.deltaPosition;
-                if (player.x - that.deltaPosition >= 0 && !that.checkCollision(next_position, player.x)) {
-                    player.x = next_position;
-                    player.cam.x -= that.deltaPosition
+                break;
+            case "d":
+            case "ArrowRight":
+                if(!this.checkCollision(player.x + this.deltaPosition, player.y)){
+                    player.x        += this.deltaPosition;
+                    player.cam.x    += camDifferenceX == 10 ? this.deltaPosition : 0;
                 }
-            }
+                break;
+            default:
+                console.log('Unknow key: '+keyPressed);
+            break;
         }
 
-        const keyPressed = command.keyPressed
-        const playerId = command.playerId
-        const player = that.state.players[playerId]
-        const moveFunction = acceptedMoves[keyPressed]
+        player.cam.y = player.cam.y > 0 ? player.cam.y : 0;
+        player.cam.x = player.cam.x > 0 ? player.cam.x : 0;
 
-        // console.log("Cam position: ", player.cam);
-        this.checkCollision()
+        player.cam.y = player.cam.y < camLimitY ? player.cam.y : camLimitY;
+        player.cam.x = player.cam.x < camLimitX ? player.cam.x : camLimitX;
 
-        if (player && moveFunction) {
-            moveFunction(player)
-            this.notifyAll({
-                type: 'move-player',
-                playerId: command.playerId,
-                position: {
-                    x: player.x,
-                    y: player.y
-                },
-                cam: player.cam
-            });
-            console.log("Player position: ", player.x, player.y)
-        }
+        SocketIo.emit("serverUpdatePlayersList", {playerList: this.state.players});
     }
 
     checkCollision(x, y)
@@ -183,7 +159,7 @@ class Game
             }
             
             // Aqui funciona, tirando o return
-            console.log(collision_array)
+            //console.log(collision_array)
             // return collision_array 
         });
 
@@ -208,36 +184,23 @@ class Game
 
         file.end();
     }
-
-
-    notifyAll(command){
-        SocketIo.emit(command.type, command);
-    }
 }
-
 
 const game = new Game();
 
 SocketIo.on("connection", socket => {
 
-    const playerId = socket.id
-    console.log(`> Player connected to server: ${playerId}`)
-
-    game.addPlayer({ playerId: playerId })
-
-    socket.emit('setup', game.state)
+    game.addPlayer(socket)
+    console.log(`> Player connected to server: ${socket.id}`)
 
     socket.on('disconnect', () => {
-        console.log(`> Player disconnected: ${playerId}`)
-        game.removePlayer({playerId:playerId})
+        console.log(`> Player disconnected: ${socket.id}`)
+        game.removePlayer(socket)
         socket.disconnect()
     })
 
-    socket.on('move-player', (command) => {
-        command.playerId = playerId
-        command.type = 'move-player'
-        
-        game.movePlayer(command)
+    socket.on('clientKeyPressed', (keyPressed) => {        
+        game.movePlayer(socket, keyPressed)
     })
 });
 
