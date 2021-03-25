@@ -1,8 +1,8 @@
-const Express   = require("express")();
-const Http      = require("http").Server(Express);
-const SocketIo  = require("socket.io")(Http);
-const { Socket } = require("dgram");
-const PNG       = require('png-js');
+const Express       = require("express")();
+const Http          = require("http").Server(Express);
+const SocketIo      = require("socket.io")(Http);
+const Fs            = require('fs');
+const JPEG          = require('jpeg-js');
 
 class GameRules
 {
@@ -32,26 +32,27 @@ class Game
         // Contem as informacoes necessarias pra inicar o canvas no client
         this.state = {
             players: {},
+            enemies: {},
             scenario: {
                 image: {
                     path: "../assets/map.png",
                     width: 640,
                     height: 640
-                }
-            }
+                },
+                collisionGrid: []
+            },
         };
-        
-        this.grid_size = this.state.scenario.image.width / this.deltaPosition;
+
+        this.gridSize = this.state.scenario.image.width / this.deltaPosition;
 
 
-        this.openCollisionMap("assets/map_col.png");
-        setInterval(this.intervalUpdatePlayersList, 100, this);
+        this.loadCollisionMap("assets/map_col.jpeg");
+        setInterval(this.intervalUpdatePlayersList, 0.5, this);
     }
 
 
-    intervalUpdatePlayersList(gameController){
-        var playerList = gameController.state.players;
-        SocketIo.emit("serverUpdatePlayerList", {playerList: playerList});
+    intervalUpdatePlayersList(that){
+        SocketIo.emit("serverUpdate", {playerList: that.state.players, collisionGrid: that.state.scenario.collisionGrid});
     }
 
     addPlayer(socket)
@@ -59,6 +60,14 @@ class Game
         // Randomiza a posição de spawn do player no mapa
         var playerX     = Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
         var playerY     = Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
+
+        // Reinicializa a posicao enquanto o spawn estiver em colisao com o mapa
+        while (this.checkCollision(playerX, playerY)){
+            console.log("Spawn collision!")
+            playerX     = Math.floor(Math.random() * this.state.scenario.image.width / this.deltaPosition) * this.deltaPosition;
+            playerY     = Math.floor(Math.random() * this.state.scenario.image.height / this.deltaPosition) * this.deltaPosition;
+        }
+
         var camPlayerX  = playerX - this.screen.width/2;
         var camPlayerY  = playerY - this.screen.height/2;
 
@@ -81,8 +90,6 @@ class Game
     movePlayer(socket, keyPressed) 
     {
         var player          = this.state.players[socket.id];
-        var camLimitX       = this.state.scenario.image.height - 20*this.deltaPosition;
-        var camLimitY       = this.state.scenario.image.width - 20*this.deltaPosition;
         var camDifferenceX  = Math.abs(player.x - player.cam.x)/this.deltaPosition;
         var camDifferenceY  = Math.abs(player.y - player.cam.y)/this.deltaPosition;
     
@@ -123,48 +130,28 @@ class Game
         player.cam.y = player.cam.y > 0 ? player.cam.y : 0;
         player.cam.x = player.cam.x > 0 ? player.cam.x : 0;
 
-        player.cam.y = player.cam.y < camLimitY ? player.cam.y : camLimitY;
-        player.cam.x = player.cam.x < camLimitX ? player.cam.x : camLimitX;
-
-        SocketIo.emit("serverUpdatePlayersList", {playerList: this.state.players});
+        player.cam.y = player.cam.y < this.state.scenario.image.height/2 ? player.cam.y : this.state.scenario.image.height/2;
+        player.cam.x = player.cam.x < this.state.scenario.image.width/2 ? player.cam.x : this.state.scenario.image.width/2;
     }
 
     checkCollision(x, y)
     {
-        return false;
+        return this.state.collisionGrid? this.state.collisionGrid[Math.round(y/16)][Math.round(x/16)] : 0
     }
 
-
-    openCollisionMap(filepath)
-    {
-
-        var collision_array = new Array(this.grid_size);
-
-        var that = this
-        PNG.decode(filepath, function (pixels) {
-            for (var i=0; i<that.grid_size; i++)
-            {
-                var grid_pixels = that.grid_size*4;
-                var row_pixels = pixels.slice(grid_pixels*i, grid_pixels*(i+1))
-                var new_row = [];
-                
-                for (var j=0; j<row_pixels.length; j+= 4)
-                {
-                    if (row_pixels[j] >= 240){
-                        row_pixels[j] = 1;
-                    }
-                    new_row.push(row_pixels[j]);
-                }
-                collision_array[i] = new_row;
+    loadCollisionMap(filepath){
+        this.state.collisionGrid    = [];
+        var jpegDecoded             = JPEG.decode(Fs.readFileSync(filepath));
+        var pixels                  = [...jpegDecoded.data];
+        var row                     = [];
+        var rowSize                 = this.gridSize;
+        for(var i = 0; i < pixels.length; i+= 4){
+            row.push(pixels[i] > 240 ? 0 : 1);
+            if(row.length >= rowSize){
+                this.state.collisionGrid.push(row);
+                row = [];
             }
-            
-            // Aqui funciona, tirando o return
-            //console.log(collision_array)
-            // return collision_array 
-        });
-
-        // Aqui nao funciona
-        // console.log(collision_array)
+        }
     }
 
     saveCollisionMap(filepath)

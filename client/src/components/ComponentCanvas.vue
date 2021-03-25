@@ -14,7 +14,6 @@
             return {
                 socket: {},
                 context: {},
-                gameWorld: {},
 
                 playerList: [],
                 playerSprites: [
@@ -33,8 +32,10 @@
             this.context = this.$refs.domCanvas.getContext('2d');
 
             var that = this;
-            this.socket.on("serverUpdatePlayerList", data => {
-                that.playerList = data.playerList;
+            this.socket.on("serverUpdate", data => {
+                if("playerList" in data){
+                    that.playerList = data.playerList;
+                }
                 that.render();
             });
 
