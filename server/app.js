@@ -38,10 +38,8 @@ Game.gridSize = Game.state.scenario.image.width / GameRules.tileSize
 
 function checkCollision(x, y)
 {
-    // console.log(Game.state.scenario.collisionGrid[Math.round(y/16)][Math.round(x/16)])
     return Game.state.scenario.collisionGrid[Math.round(y/16)][Math.round(x/16)]
 }
-
 
 function addPlayer(socket)
 {
@@ -62,9 +60,6 @@ function addPlayer(socket)
 
     var camPlayerX = playerX - GameRules.camera.width/2;
     var camPlayerY = playerY - GameRules.camera.height/2;
-
-    // camPlayerY = camPlayerY > 0 ? camPlayerY : 0;
-    // camPlayerX = camPlayerX > 0 ? camPlayerX : 0;
 
     camPlayerX = camPlayerX < 0 ? 0 : camPlayerX;
     camPlayerY = camPlayerY < 0 ? 0 : camPlayerY;
@@ -101,8 +96,6 @@ function movePlayer(socket, keyPressed)
     var camDifferenceX  = Math.abs(player.position.x - player.cam.x)/ GameRules.tileSize;
     var camDifferenceY  = Math.abs(player.position.y - player.cam.y)/ GameRules.tileSize;
 
-    console.log(`Server: Current Player ${player.position.x}, ${player.position.y}`)
-
     switch(keyPressed){
         case "w":
         case "ArrowUp":
@@ -137,15 +130,12 @@ function movePlayer(socket, keyPressed)
         break;
     }
 
-    console.log(`Server: After Player ${player.position.x}, ${player.position.y}`)
-
     player.cam.y = player.cam.y > 0 ? player.cam.y : 0;
     player.cam.x = player.cam.x > 0 ? player.cam.x : 0;
 
     player.cam.y = player.cam.y < Game.state.scenario.image.height/2 ? player.cam.y : Game.state.scenario.image.height/2;
     player.cam.x = player.cam.x < Game.state.scenario.image.width/2 ? player.cam.x : Game.state.scenario.image.width/2;
 }
-
 
 function loadScenario(pathCollisionMap)
 {
@@ -165,12 +155,10 @@ function loadScenario(pathCollisionMap)
     }
 }
 
-
 function sendGameState()
 {
     SocketIo.emit("serverUpdate", {playerList: Game.state.players, enemyList: Game.state.enemies});
 }
-
 
 function addEnemy()
 {
@@ -200,12 +188,10 @@ function addEnemy()
     setCollisionMapValue(enemyX, enemyY, 1);
 }
 
-
 function setCollisionMapValue(x, y, value)
 {
     Game.state.scenario.collisionGrid[Math.round(y/16)][Math.round(x/16)] = value
 }
-
 
 function saveCollisionMap(filepath)
 {
@@ -225,23 +211,27 @@ function saveCollisionMap(filepath)
     file.end();
 }
 
+function initializeGame()
+{
+    loadScenario("assets/map_col.jpeg");
+
+    addEnemy();
+    addEnemy();
+    addEnemy();
+    addEnemy();
+
+    setInterval(sendGameState, 50);
+}
 
 
 
-loadScenario("assets/map_col.jpeg");
-
-setInterval(sendGameState, 50);
+initializeGame();
 
 SocketIo.on("connection", socket => 
 {
     console.log(`Server: Player connected to server: ${socket.id}`)
 
     addPlayer(socket);
-
-    addEnemy();
-    addEnemy();
-    addEnemy();
-    addEnemy();
 
     socket.on('disconnect', () => {
         console.log(`Server: Player disconnected: ${socket.id}`)
