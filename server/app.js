@@ -97,30 +97,34 @@ class Game
         var that = this;
         const acceptedMoves = {
             ArrowUp(player) {
-                if (player.y - that.deltaPosition >= 0) {
-                    player.y -= that.deltaPosition
+                var next_position = player.y - that.deltaPosition;
+                if (next_position >= 0 && !that.checkCollision(player.x, next_position)) {
+                    player.y = next_position
                     player.cam.y -= that.deltaPosition
                 }
             },
             ArrowRight(player) {
-                if (player.x + that.deltaPosition < that.state.scenario.image.width) {
-                    player.x += that.deltaPosition
+                var next_position = player.x + that.deltaPosition;
+                if (next_position < that.state.scenario.image.width && !that.checkCollision(next_position, player.y)) {
+                    player.x = next_position
                     player.cam.x += that.deltaPosition
                 }else{
                     console.log("Limit " ,that.state.scenario.width)
                 }
             },
             ArrowDown(player) {
-                if (player.y + that.deltaPosition < that.state.scenario.image.height) {
-                    player.y += that.deltaPosition
+                var next_position = player.y + that.deltaPosition;
+                if (player.y + that.deltaPosition < that.state.scenario.image.height && !that.checkCollision(player.x, next_position)) {
+                    player.y = next_position
                     player.cam.y += that.deltaPosition
                 }else{
                     console.log("Limit ", that.state.scenario.height)
                 }
             },
             ArrowLeft(player) {
-                if (player.x - that.deltaPosition >= 0) {
-                    player.x -= that.deltaPosition
+                var next_position = player.x - that.deltaPosition;
+                if (player.x - that.deltaPosition >= 0 && !that.checkCollision(next_position, player.x)) {
+                    player.x = next_position;
                     player.cam.x -= that.deltaPosition
                 }
             }
@@ -151,7 +155,7 @@ class Game
 
     checkCollision(x, y)
     {
-        return true;
+        return false;
     }
 
 
