@@ -1,5 +1,5 @@
 <template>
-    <canvas width="320" height="320">
+    <canvas width="320" height="320" style="margin: 0 auto; width: 100%">
         Canvas not supported
     </canvas>
 </template>
