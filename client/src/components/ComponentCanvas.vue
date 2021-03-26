@@ -27,15 +27,19 @@
                     require('../assets/skeleton/v1/skeleton2_v1_3.png'),
                     require('../assets/skeleton/v1/skeleton2_v1_4.png'),
                 ],
-                background: new Image(),
+                background: new Image(),                
+                sprite_char: new Image(),
+                sprite_enemy: new Image(),
             }
         },
         created() {
             this.socket = io("http://localhost:3000", {transports:['websocket']});
             this.background.src = require("../assets/map.jpeg");
+            this.sprite_char.className += "char_"
         },
         mounted() {
-            this.context = this.$refs.domCanvas.getContext('2d');
+            this.canvas = this.$refs.domCanvas;
+            this.context = this.canvas.getContext('2d');
 
             var that = this;
             this.socket.on("serverUpdate", data => {
@@ -54,6 +58,17 @@
                 var keypressed = e.key;
                 that.socket.emit('clientKeyPressed', keypressed);
             });
+
+            this.canvas.addEventListener('click', function(e) {
+                console.log("Click")
+                const canvasRect = that.canvas.getBoundingClientRect();
+                const position = {
+                    x: e.clientX - canvasRect.left,
+                    y: e.clientY - canvasRect.top 
+                } 
+                that.socket.emit('clientMouseClicked', position)
+            })
+
         },
         methods: {
             render(){
@@ -67,18 +82,15 @@
                 // Desenha o background antes pra ficar atras dos players
                 this.context.drawImage(this.background, 0, 0);   
 
-                var sprite_char = new Image();
-                var sprite_enemy = new Image();
+
                 for( const [key, value] of Object.entries(this.playerList)){
-                    console.log(value.position)
-                    // console.log(this.playerSprites[value.sprite])
-                    sprite_char.src = this.playerSprites[value.sprite];
-                    this.context.drawImage(sprite_char, 0, 0, 16, 16, value.position.x, value.position.y, 16, 16);   
+                    this.sprite_char.src = this.playerSprites[value.sprite];
+                    this.context.drawImage(this.sprite_char, 0, 0, 16, 16, value.position.x, value.position.y, 16, 16);   
                 }
 
                 for( const [key, value] of Object.entries(this.enemyList)){
-                    sprite_enemy.src = this.enemySprites[value.sprite];
-                    this.context.drawImage(sprite_enemy, 0, 0, 16, 16, value.position.x, value.position.y, 16, 16);   
+                    this.sprite_enemy.src = this.enemySprites[value.sprite];
+                    this.context.drawImage(this.sprite_enemy, 0, 0, 16, 16, value.position.x, value.position.y, 16, 16);   
                 }
 
 
@@ -90,4 +102,10 @@
     }
 </script>
 
-<style scoped></style>
+<style scoped>
+
+.char_ {
+    width: 50px;
+}
+
+</style>

@@ -3,6 +3,7 @@ const Http          = require("http").Server(Express);
 const SocketIo      = require("socket.io")(Http);
 const Fs            = require('fs');
 const JPEG          = require('jpeg-js');
+var pf              = require('pathfinding')
 
 
 const GameRules = {
@@ -38,7 +39,7 @@ Game.gridSize = Game.state.scenario.image.width / GameRules.tileSize
 
 function checkCollision(x, y)
 {
-    return Game.state.scenario.collisionGrid[Math.round(y/16)][Math.round(x/16)]
+    return Game.state.scenario.collisionGrid[Math.round(y / GameRules.tileSize )][Math.round(x / GameRules.tileSize)]
 }
 
 function addPlayer(socket)
@@ -90,7 +91,7 @@ function removePlayer(socket)
 
 function movePlayer(socket, keyPressed) 
 {
-    console.log(`Server: KeyPressed ${keyPressed}`)
+    // console.log(`Server: KeyPressed ${keyPressed}`)
 
     var player          = Game.state.players[socket.id];
     var camDifferenceX  = Math.abs(player.position.x - player.cam.x)/ GameRules.tileSize;
@@ -211,6 +212,28 @@ function saveCollisionMap(filepath)
     file.end();
 }
 
+function getPath(playerId, cpX1, cpY1, tpX1, tpY1)
+{
+    var player = Game.state.players[playerId];
+
+    var camGridX = player.cam.x/16
+    var camGridY = player.cam.y/16
+
+    var targetX = camGridX + Math.round(tpX1/40)
+    var targetY = camGridY + Math.round(tpY1/40)
+
+    console.log(camGridX, camGridY)
+
+    console.log("Clicked: ", Math.round(cpX1/16), Math.round(cpY1/16), targetX, targetY)
+    // var grid = new pf.Grid(Game.state.scenario.collisionGrid);
+
+    // var finder = new pf.AStarFinder();
+    // var path = finder.findPath(Math.round(cpX1/40), Math.round(cpY1/40), Math.round(tpX1/40), Math.round(tpY1/40), grid);
+
+    // console.log(path);
+
+}
+
 function initializeGame()
 {
     loadScenario("assets/map_col.jpeg");
@@ -241,6 +264,11 @@ SocketIo.on("connection", socket =>
 
     socket.on('clientKeyPressed', (keyPressed) => {    
         movePlayer(socket, keyPressed);    
+    })
+
+    socket.on('clientMouseClicked', (position) => {
+        var player = Game.state.players[socket.id];
+        getPath(socket.id, player.position.x, player.position.y, position.x, position.y)
     })
 });
 
