@@ -25,7 +25,7 @@
     import io from "socket.io-client"
 
     export default {
-        name: 'ComponentInventory',
+        name: 'Inventory',
         data (){
             return {
                 socket: {},

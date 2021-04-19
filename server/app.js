@@ -6,270 +6,335 @@ const JPEG          = require('jpeg-js');
 var pf              = require('pathfinding')
 
 
-const GameRules = {
-    tileSize: 16,
-    camera: {
-        width: 320,
-        height: 320
-    },
-    amountSpritesPlayer: 3,
-    amountSpritesEnemy: 4
-}
+function createGame()
+{
+    return {
+        tileSize: 16,
+        gridSize: 0,
+        camera: {
+            width: 320,
+            height: 320
+        },
+        amountSpritesPlayer: 3,
+        amountSpritesEnemy:  4,
 
+        state: {
 
-var Game = {
-    state: {
-        players: {},
-        enemies: {},
-        countEnemies: 0,
-        scenario: {
-            image: {
-                path: "../assets/map.png",
-                width: 640,
-                height: 640
+            socketPlayers: {},
+            players: {},
+
+            enemies: {},
+            countEnemies: 0,  // Used to manage enemies id
+
+            maps: {
+
+                0: {
+                    name: "main",
+                    scenario: {
+                        image: {
+                            path: "../assets/map.png",
+                            width: 640,
+                            height: 640
+                        },
+                        collisionGrid: [],
+                    }
+                },
+
+                1: {
+                    name: "secondary",
+                    scenario: {
+                        image: {
+                            path: "../assets/map.png",
+                            width: 1248,
+                            height: 1248
+                        },
+                        collisionGrid: [],
+                    }
+                },
+
+            }
+        },
+
+        checkCollision(mapId, x, y) {
+            if (this.state.maps[mapId].scenario.collisionGrid.length <= 0)
+                return false;
+
+            return this.state.maps[mapId].scenario.collisionGrid[Math.round( y / this.tileSize )][Math.round( x / this.tileSize )];
+        },
+
+        addPlayer(socket, mapId) {
+
+            if (!this.state.maps[mapId])
+            {
+                console.log(`> Server: MapId ${mapId} não existe`);
+                return;
+            }
+
+            let playerPosition = this.randomizePosition(mapId);
+            let playerCamera = this.calculatePlayerCamera(mapId, playerPosition.x, playerPosition.y);
+
+            console.log(`> Server: Player added. Position: ${playerPosition.x}, ${playerPosition.y}`)
+
+            this.state.players[socket.id] = {
+                mapId:    mapId,
+                position: playerPosition,
+                cam:      playerCamera,
+                sprite:   Math.floor(Math.random() * this.amountSpritesPlayer),
             },
-            collisionGrid: []
+
+            this.state.socketPlayers[socket.id] = socket;
+
+            this.notifyPlayersByMap(mapId, {
+                event:     "ADD_PLAYER",
+                playerId:  socket.id,
+                player:    this.state.players[socket.id]
+            })
+        },
+
+        removePlayer(socket) {
+            console.log(`> Server: Removing player ${socket.id}`)
+
+            let mapId = this.state.players[socket.id].mapId
+            
+            this.notifyPlayersByMap(mapId, {
+                event:     "REMOVE_PLAYER",
+                playerId:  socket.id
+            })
+
+            delete this.state.players[socket.id];
+            delete this.state.socketPlayers[socket.id];
+        },
+
+        movePlayer(socket, keyPressed) {
+            console.log(`Server: KeyPressed ${keyPressed}`)
+
+            var player          = this.state.players[socket.id];
+            let mapId           = player.mapId;
+
+            switch(keyPressed){
+                case "w":
+                case "ArrowUp":
+
+                    if(!this.checkCollision(mapId, player.position.x, player.position.y - this.tileSize))
+                        player.position.y   -= this.tileSize;
+                    
+                    break;
+                case "s":
+                case "ArrowDown":
+
+                    if(!this.checkCollision(mapId, player.position.x, player.position.y + this.tileSize))
+                        player.position.y   += this.tileSize;
+
+                    break;
+                case "a":
+                case "ArrowLeft":
+
+                    if(!this.checkCollision(mapId, player.position.x - this.tileSize, player.position.y))
+                        player.position.x   -= this.tileSize;
+
+                    break;
+                case "d":
+                case "ArrowRight":
+
+                    if(!this.checkCollision(mapId, player.position.x + this.tileSize, player.position.y))
+                        player.position.x   += this.tileSize;
+
+                    break;
+                default:
+                    console.log(`> Server: Unknown key: ${keyPressed}`);
+                break;
+            }
+
+            player.cam = this.calculatePlayerCamera(mapId, player.position.x, player.position.y);
+
+            this.notifyAllPlayers({
+                event:    "PLAYER_MOVE",
+                playerId: socket.id,
+                position: player.position,
+                camera:   player.cam
+            })
+        },
+
+        addEnemy(mapId){
+
+            let enemyPosition = this.randomizePosition(mapId);
+
+            console.log(`Enemy Position: ${enemyPosition.x}, ${enemyPosition.y}`);
+
+            // Adiciona o player no state do jogo
+            this.state.enemies[this.state.countEnemies] = {
+                position: enemyPosition,
+                sprite: Math.floor(Math.random() * this.amountSpritesEnemy),
+            }
+            
+            this.setCollisionMapValue(mapId, enemyPosition.x, enemyPosition.y, 1);
+
+            this.notifyPlayersByMap(mapId, {
+                event:    "ADD_ENEMY",
+                enemyId:  this.state.countEnemies,
+                enemy:    this.state.enemies[this.state.countEnemies]
+            })
+
+            this.state.countEnemies += 1
+        },
+
+        removeEnemy(enemyId) {
+                        
+            this.notifyPlayersByMap(mapId, {
+                event:     "REMOVE_ENEMY",
+                enemyId:   enemyId.id
+            })
+
+            delete this.state.enemies[enemyId]
+        },
+
+        notifyAllPlayers(command) {
+            SocketIo.emit(command.event, command);
+        },
+
+        notifyPlayersByMap(mapId, command) {
+            var that = this
+            for( const [id, player] of Object.entries(this.state.players)){
+                if (that.state.socketPlayers && player.mapId == mapId)
+                    that.state.socketPlayers[id].emit(command.event, command);
+            }
+        },
+
+        notifyPlayer(socket, command) {
+            socket.emit(command.event, command);
+        },
+
+        showState() {
+            console.table(this.state)
+        },
+
+        showPlayers() {
+            console.log(`\n> Server: Players:\n`);
+            console.table(this.state.players)
+        },
+
+        showEnemies() {
+            console.log(`\n> Server: Enemies:\n`);
+            console.table(this.state.enemies)
+        },
+
+        randomizePosition(mapId) {
+            // Randomiza a posição de spawn do player no mapa
+            var posX  = Math.floor(Math.random() * this.state.maps[mapId].scenario.image.width / this.tileSize) * this.tileSize;
+            var posY  = Math.floor(Math.random() * this.state.maps[mapId].scenario.image.height / this.tileSize) * this.tileSize;
+
+            // Reinicializa a posicao enquanto o spawn estiver em colisao com o mapa
+            while (this.checkCollision(mapId, posX, posY)){
+                console.log(`Server: Collision`)
+                posX   = Math.floor(Math.random() * this.state.maps[mapId].scenario.image.width / this.tileSize) * this.tileSize;
+                posY   = Math.floor(Math.random() * this.state.maps[mapId].scenario.image.height / this.tileSize) * this.tileSize;
+            }
+
+            return {x: posX, y: posY};
+        },
+
+        calculatePlayerCamera(mapId, playerX, playerY) {
+            let camX = playerX - this.camera.width/2;
+            let camY = playerY - this.camera.height/2;
+        
+            camX = camX < 0 ? 0 : camX;
+            camY = camY < 0 ? 0 : camY;
+        
+            camX = camX + this.camera.width > this.state.maps[mapId].scenario.image.width ? this.state.maps[mapId].scenario.image.width - this.camera.width : camX;
+            camY = camY + this.camera.height > this.state.maps[mapId].scenario.image.height ? this.state.maps[mapId].scenario.image.height - this.camera.height : camY;
+
+            return {x: camX, y: camY};
+        },
+
+        setCollisionMapValue(mapId, x, y, value) {
+            if (this.state.maps[mapId].scenario.collisionGrid.length > 0)
+                this.state.maps[mapId].scenario.collisionGrid[Math.round( y / this.tileSize )][Math.round( x / this.tileSize )] = value
+        },
+
+        loadCollisionMap(mapId, pathCollisionMap)
+        {
+            console.log(`> Server: Loading Collision Map. MapId: ${mapId}`);
+
+            var jpegDecoded    = JPEG.decode(Fs.readFileSync(pathCollisionMap));
+            var pixels         = [...jpegDecoded.data];
+            var row            = [];
+            var rowSize        = this.gridSize;
+
+            // A pixel equals to (R G B A). Get only R pixel
+            for(var i = 0; i < pixels.length; i+= 4)
+            {
+                row.push(pixels[i] > 235 ? 0 : 1);
+                if(row.length >= rowSize){
+                    this.state.maps[mapId].scenario.collisionGrid.push(row);
+                    row = [];
+                }
+            }
+        },
+
+        saveCollisionMap(mapId, pathToSave)
+        {
+            var file = Fs.createWriteStream(pathToSave);
+
+            file.on('error', function (err) { 
+                console.log(err); 
+                return false;
+            });
+
+            this.state.maps[mapId].collisionGrid.forEach(function (row) { 
+                file.write(row + '\n'); 
+            })
+
+            file.end();
+        },
+
+        showCollisionMap(mapId) {
+            this.state.maps[mapId].scenario.collisionGrid.forEach(row => console.log(row + "\n") )
+        },
+
+        startGamePreset(mapId = 0) {
+            this.loadCollisionMap(mapId, "assets/map_col.jpeg");
+
+            this.addEnemy(mapId);
+            this.addEnemy(mapId);
+            this.addEnemy(mapId);
+            this.addEnemy(mapId);
         }
-    },
-    gridSize: 0
-}
-
-Game.gridSize = Game.state.scenario.image.width / GameRules.tileSize
-
-
-function checkCollision(x, y)
-{
-    return Game.state.scenario.collisionGrid[Math.round(y / GameRules.tileSize )][Math.round(x / GameRules.tileSize)]
-}
-
-function addPlayer(socket)
-{
-    console.log(`Server: Adding player ${socket.id}`)
-
-    // Randomiza a posição de spawn do player no mapa
-    var playerX = Math.floor(Math.random() * Game.state.scenario.image.width / GameRules.tileSize) * GameRules.tileSize;
-    var playerY = Math.floor(Math.random() * Game.state.scenario.image.height / GameRules.tileSize) * GameRules.tileSize;
-
-    // Reinicializa a posicao enquanto o spawn estiver em colisao com o mapa
-    while (checkCollision(playerX, playerY)){
-        playerX = Math.floor(Math.random() * Game.state.scenario.image.width / GameRules.tileSize) * GameRules.tileSize;
-        playerY = Math.floor(Math.random() * Game.state.scenario.image.height / GameRules.tileSize) * GameRules.tileSize;
-        console.log(`Server: Spawn Collision! Checking position ${playerX}, ${playerY}`);
-    }
-
-    console.log(`Server: Player added. Position: ${playerX}, ${playerY}`)
-
-    var camPlayerX = playerX - GameRules.camera.width/2;
-    var camPlayerY = playerY - GameRules.camera.height/2;
-
-    camPlayerX = camPlayerX < 0 ? 0 : camPlayerX;
-    camPlayerY = camPlayerY < 0 ? 0 : camPlayerY;
-
-    camPlayerX = camPlayerX + GameRules.camera.width > Game.state.scenario.image.width ? Game.state.scenario.image.width - GameRules.camera.width : camPlayerX;
-    camPlayerY = camPlayerY + GameRules.camera.height > Game.state.scenario.image.height ? Game.state.scenario.image.height - GameRules.camera.height : camPlayerY;
-
-    Game.state.players[socket.id] = {
-        position: {
-            x: playerX,
-            y: playerY
-        },
-        cam: {
-            x: camPlayerX,
-            y: camPlayerY
-        },
-        sprite: Math.floor(Math.random() * GameRules.amountSpritesPlayer),
-    }
-    console.log(`Server: Camera Position ${camPlayerX}, ${camPlayerY}`)
-}
-
-function removePlayer(socket)
-{
-    console.log(`Server: Removing player ${socket.id}`)
-
-    delete Game.state.players[socket.id]
-}
-
-function movePlayer(socket, keyPressed) 
-{
-    // console.log(`Server: KeyPressed ${keyPressed}`)
-
-    var player          = Game.state.players[socket.id];
-    var camDifferenceX  = Math.abs(player.position.x - player.cam.x)/ GameRules.tileSize;
-    var camDifferenceY  = Math.abs(player.position.y - player.cam.y)/ GameRules.tileSize;
-
-    switch(keyPressed){
-        case "w":
-        case "ArrowUp":
-            if(!checkCollision(player.position.x, player.position.y - GameRules.tileSize)){
-                player.position.y   -= GameRules.tileSize;
-                player.cam.y        -= camDifferenceY == 10 ? GameRules.tileSize : 0;
-            }
-            break;
-        case "s":
-        case "ArrowDown":
-            if(!checkCollision(player.position.x, player.position.y + GameRules.tileSize)){
-                player.position.y   += GameRules.tileSize;
-                player.cam.y        += camDifferenceY == 10 ? GameRules.tileSize : 0;
-            }
-            break;
-        case "a":
-        case "ArrowLeft":
-            if(!checkCollision(player.position.x - GameRules.tileSize, player.position.y)){
-                player.position.x   -= GameRules.tileSize;
-                player.cam.x        -= camDifferenceX == 10 ? GameRules.tileSize : 0;
-            }
-            break;
-        case "d":
-        case "ArrowRight":
-            if(!checkCollision(player.position.x + GameRules.tileSize, player.position.y)){
-                player.position.x   += GameRules.tileSize;
-                player.cam.x        += camDifferenceX == 10 ? GameRules.tileSize : 0;
-            }
-            break;
-        default:
-            console.log(`Server: Unkown key: ${keyPressed}`);
-        break;
-    }
-
-    player.cam.y = player.cam.y > 0 ? player.cam.y : 0;
-    player.cam.x = player.cam.x > 0 ? player.cam.x : 0;
-
-    player.cam.y = player.cam.y < Game.state.scenario.image.height/2 ? player.cam.y : Game.state.scenario.image.height/2;
-    player.cam.x = player.cam.x < Game.state.scenario.image.width/2 ? player.cam.x : Game.state.scenario.image.width/2;
-}
-
-function loadScenario(pathCollisionMap)
-{
-    console.log(`Server: Loading scenario`)
-
-    var jpegDecoded    = JPEG.decode(Fs.readFileSync(pathCollisionMap));
-    var pixels         = [...jpegDecoded.data];
-    var row            = [];
-    var rowSize        = Game.gridSize;
-
-    for(var i = 0; i < pixels.length; i+= 4){
-        row.push(pixels[i] > 240 ? 0 : 1);
-        if(row.length >= rowSize){
-            Game.state.scenario.collisionGrid.push(row);
-            row = [];
-        }
     }
 }
 
-function sendGameState()
-{
-    SocketIo.emit("serverUpdate", {playerList: Game.state.players, enemyList: Game.state.enemies});
-}
 
-function addEnemy()
-{
-    // Randomiza a posição de spawn do player no mapa
-    var enemyX  = Math.floor(Math.random() * Game.state.scenario.image.width / GameRules.tileSize) * GameRules.tileSize;
-    var enemyY  = Math.floor(Math.random() * Game.state.scenario.image.height / GameRules.tileSize) * GameRules.tileSize;
-
-    // Reinicializa a posicao enquanto o spawn estiver em colisao com o mapa
-    while (checkCollision(enemyX, enemyY)){
-        console.log(`Server: Enemy Collision`)
-        enemyX   = Math.floor(Math.random() * Game.state.scenario.image.width / GameRules.tileSize) * GameRules.tileSize;
-        enemyY   = Math.floor(Math.random() * Game.state.scenario.image.height / GameRules.tileSize) * GameRules.tileSize;
-    }
-
-    console.log(`Enemy Position: ${enemyX}, ${enemyY}`);
-
-    // Adiciona o player no state do jogo
-    Game.state.enemies[Game.state.countEnemies] = {
-        position: {
-            x:      enemyX,
-            y:      enemyY
-        },
-        sprite: Math.floor(Math.random() * GameRules.amountSpritesEnemy),
-    }
-    Game.state.countEnemies += 1
-    
-    setCollisionMapValue(enemyX, enemyY, 1);
-}
-
-function setCollisionMapValue(x, y, value)
-{
-    Game.state.scenario.collisionGrid[Math.round(y/16)][Math.round(x/16)] = value
-}
-
-function saveCollisionMap(filepath)
-{
-    var fs = require('fs');
-
-    var file = fs.createWriteStream(filepath);
-
-    file.on('error', function (err) { 
-        console.log(err); 
-        return false;
-    });
-
-    this.collision_array.forEach(function (v) { 
-        file.write(v + '\n'); 
-    })
-
-    file.end();
-}
-
-function getPath(playerId, cpX1, cpY1, tpX1, tpY1)
-{
-    var player = Game.state.players[playerId];
-
-    var camGridX = player.cam.x/16
-    var camGridY = player.cam.y/16
-
-    var targetX = camGridX + Math.round(tpX1/40)
-    var targetY = camGridY + Math.round(tpY1/40)
-
-    console.log(camGridX, camGridY)
-
-    console.log("Clicked: ", Math.round(cpX1/16), Math.round(cpY1/16), targetX, targetY)
-    // var grid = new pf.Grid(Game.state.scenario.collisionGrid);
-
-    // var finder = new pf.AStarFinder();
-    // var path = finder.findPath(Math.round(cpX1/40), Math.round(cpY1/40), Math.round(tpX1/40), Math.round(tpY1/40), grid);
-
-    // console.log(path);
-
-}
-
-function initializeGame()
-{
-    loadScenario("assets/map_col.jpeg");
-
-    addEnemy();
-    addEnemy();
-    addEnemy();
-    addEnemy();
-
-    setInterval(sendGameState, 50);
-}
+var Game = createGame();
+Game.gridSize = Game.state.maps[0].scenario.image.width / Game.tileSize
 
 
-
-initializeGame();
+Game.startGamePreset(0);
 
 SocketIo.on("connection", socket => 
 {
-    console.log(`Server: Player connected to server: ${socket.id}`)
+    console.log(`> Server: Player connected to server: ${socket.id}`)
 
-    addPlayer(socket);
+    Game.addPlayer(socket, 0);
+
+    Game.showPlayers();
+    Game.showEnemies();
+
+
+    var {players, enemies} = Game.state;
+    socket.emit("GAME_STATE", { players, enemies } );
 
     socket.on('disconnect', () => {
-        console.log(`Server: Player disconnected: ${socket.id}`)
-        removePlayer(socket);
-        socket.disconnect()
+        console.log(`> Server: Player disconnected: ${socket.id}`)
+        Game.removePlayer(socket);
     })
 
-    socket.on('clientKeyPressed', (keyPressed) => {    
-        movePlayer(socket, keyPressed);    
+
+    socket.on("ADMIN_ADD_ENEMY", () => {
+        console.log(`> Server: Adding enemy`)
+        Game.addEnemy(0);
     })
 
-    socket.on('clientMouseClicked', (position) => {
-        var player = Game.state.players[socket.id];
-        getPath(socket.id, player.position.x, player.position.y, position.x, position.y)
-    })
+    socket.on('CLIENT_KEYPRESSED', keyPressed => Game.movePlayer(socket, keyPressed))
+
 });
 
 
